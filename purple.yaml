@@ -1,0 +1,14 @@
+database: purple.db
+
+import:
+  recursive: false
+  batch_size: 1000
+  accepted_schemes:
+    - http
+    - https
+
+output:
+  directory: ./output
+
+logging:
+  level: INFO

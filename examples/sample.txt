@@ -1,0 +1,7 @@
+Visit https://example.com/data
+and also see https://www.example.gov/files/report.pdf
+HTTPS://Example.COM/Test
+http://example.com:80/path?q=1
+See docs at https://data.example.gov/c.csv.
+Random text without a link.
+https://foo.example.co.uk/archive

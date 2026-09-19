@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "purple-link-extractor"
+version = "1.0.0"
+description = "Domain-aware URL extraction and indexing librarian"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "tldextract>=5.1.0",
+    "idna>=3.7",
+    "PyYAML>=6.0",
+    "click>=8.1",
+]
+
+[project.scripts]
+purple = "purple.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["purple*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
