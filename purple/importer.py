@@ -73,6 +73,7 @@ class Importer:
         self.db_path = Path(db_path)
         self.batch_size = max(1, int(batch_size))
         self.accepted_schemes = [s.lower() for s in (accepted_schemes or ["http", "https"])]
+        self.progress_cb = None
 
     def import_path(self, target: Path, recursive: bool = False) -> ImportStats:
         stats = ImportStats()
@@ -159,6 +160,17 @@ class Importer:
                 conn.commit()
                 log.info("Checkpoint committed")
                 batch = 0
+                if self.progress_cb:
+                    self.progress_cb(
+                        {
+                            "file": path.name,
+                            "discovered": discovered,
+                            "inserted": inserted,
+                            "duplicates": duplicates,
+                            "invalid": invalid,
+                            "status": "PROCESSING",
+                        }
+                    )
 
         conn.execute(
             "UPDATE sources SET status='complete', link_count=?, urls_discovered=?, "
