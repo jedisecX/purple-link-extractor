@@ -34,6 +34,18 @@ _import_state: dict[str, Any] = {
     "status": "IDLE",
     "error": None,
 }
+_harvest_state: dict[str, Any] = {
+    "running": False,
+    "dork": None,
+    "engine": None,
+    "page": 0,
+    "discovered": 0,
+    "inserted": 0,
+    "duplicates": 0,
+    "invalid": 0,
+    "status": "IDLE",
+    "error": None,
+}
 _lock = threading.Lock()
 
 
@@ -46,6 +58,13 @@ class SearchSave(BaseModel):
     name: str
     query: str = ""
     filters: dict = {}
+
+
+class HarvestIn(BaseModel):
+    dork: str
+    engines: list[str] = ["yahoo", "bing"]
+    pages: int = 5
+    delay: float = 2.0
 
 
 class ExportIn(BaseModel):
@@ -159,6 +178,86 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
     def api_save(payload: SearchSave = Body(...)):
         sid = lib.save_search(DB, payload.name, payload.query, payload.filters)
         return {"id": sid}
+
+    @app.get("/api/harvest/presets")
+    def api_harvest_presets():
+        from purple.harvester import PRESETS
+
+        return {"items": [{"name": k, "dork": v} for k, v in PRESETS.items()]}
+
+    @app.get("/api/harvest/status")
+    def api_harvest_status():
+        with _lock:
+            return dict(_harvest_state)
+
+    @app.get("/api/harvest/stream")
+    async def api_harvest_stream():
+        async def gen():
+            while True:
+                with _lock:
+                    payload = dict(_harvest_state)
+                yield f"data: {json.dumps(payload)}\n\n"
+                if not payload.get("running") and payload.get("status") in {"COMPLETE", "FAILED", "IDLE"}:
+                    break
+                await asyncio.sleep(0.4)
+
+        return StreamingResponse(gen(), media_type="text/event-stream")
+
+    @app.post("/api/harvest")
+    def api_harvest(payload: HarvestIn = Body(...)):
+        dork = (payload.dork or "").strip()
+        if not dork:
+            raise HTTPException(400, "dork is required")
+        engines = [e.lower() for e in payload.engines if e.lower() in {"yahoo", "bing"}] or ["yahoo"]
+        pages = min(max(int(payload.pages), 1), 20)
+        with _lock:
+            if _harvest_state["running"] or _import_state["running"]:
+                raise HTTPException(409, "A job is already running")
+            _harvest_state.update(
+                running=True,
+                status="SEARCHING",
+                error=None,
+                dork=dork,
+                engine=None,
+                page=0,
+                discovered=0,
+                inserted=0,
+                duplicates=0,
+                invalid=0,
+            )
+
+        def _run():
+            from purple.harvester import SearchHarvester
+
+            def cb(msg):
+                with _lock:
+                    _harvest_state.update(msg)
+
+            try:
+                harvester = SearchHarvester(delay=payload.delay, progress_cb=cb)
+                found = harvester.harvest(dork, engines=engines, pages=pages)
+                imp = Importer(DB)
+                imp.progress_cb = cb
+                label = f"harvest:{'+'.join(engines)}:{dork}"
+                stats = imp.ingest_urls(found.urls, source_name=label[:240], label="harvest")
+                with get_db(DB) as conn:
+                    lib.log_activity(conn, "HARVEST INDEXED", f"{dork} discovered={found.discovered} new={stats.urls_discovered - stats.duplicates}")
+                    conn.commit()
+                with _lock:
+                    _harvest_state.update(
+                        running=False,
+                        status="COMPLETE",
+                        discovered=found.discovered,
+                        inserted=stats.urls_discovered - stats.duplicates,
+                        duplicates=stats.duplicates,
+                        invalid=stats.invalid_urls,
+                    )
+            except Exception as exc:
+                with _lock:
+                    _harvest_state.update(running=False, status="FAILED", error=str(exc))
+
+        threading.Thread(target=_run, daemon=True).start()
+        return {"started": True, "dork": dork, "engines": engines, "pages": pages}
 
     @app.post("/api/export")
     def api_export(payload: ExportIn = Body(...)):
