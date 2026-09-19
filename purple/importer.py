@@ -104,6 +104,72 @@ class Importer:
         stats.finish()
         return stats
 
+    def ingest_urls(self, urls: list[str], source_name: str, label: str = "harvest") -> ImportStats:
+        """Index already-discovered URLs into the same SQLite librarian.
+
+        Dedupes on normalized_url. Creates a synthetic source row so harvest
+        runs have provenance without writing a csv/txt until export.
+        """
+        stats = ImportStats()
+        now = utcnow()
+        digest = hashlib.sha256(f"{label}:{source_name}:{now}".encode()).hexdigest()
+        with get_db(self.db_path) as conn:
+            cur = conn.execute(
+                "INSERT INTO sources (filename, file_path, file_size, file_hash, imported_at, status) "
+                "VALUES (?, ?, ?, ?, ?, 'in_progress')",
+                (source_name[:240], label, 0, digest, now),
+            )
+            source_id = cur.lastrowid
+            conn.commit()
+            discovered = inserted = duplicates = invalid = 0
+            batch = 0
+            for i, raw in enumerate(urls, 1):
+                extracted = ExtractedURL(
+                    raw=raw,
+                    source_file=source_name,
+                    source_row=i,
+                    source_column=label,
+                )
+                discovered += 1
+                stats.urls_discovered += 1
+                norm = normalize(extracted.raw, self.accepted_schemes)
+                if not norm.valid:
+                    invalid += 1
+                    stats.invalid_urls += 1
+                    continue
+                added = self._upsert_link(conn, source_id, extracted, norm, now)
+                if added:
+                    inserted += 1
+                else:
+                    duplicates += 1
+                    stats.duplicates += 1
+                batch += 1
+                if batch >= self.batch_size:
+                    conn.commit()
+                    batch = 0
+                    if self.progress_cb:
+                        self.progress_cb(
+                            {
+                                "file": source_name,
+                                "discovered": discovered,
+                                "inserted": inserted,
+                                "duplicates": duplicates,
+                                "invalid": invalid,
+                                "status": "INDEXING",
+                            }
+                        )
+            conn.execute(
+                "UPDATE sources SET status='complete', link_count=?, urls_discovered=?, "
+                "urls_inserted=?, duplicates=?, invalid_urls=?, last_checkpoint=? WHERE id=?",
+                (inserted, discovered, inserted, duplicates, invalid, utcnow(), source_id),
+            )
+            self._refresh_counts(conn)
+            stats.files_processed = 1
+            stats.unique_urls = conn.execute("SELECT COUNT(*) FROM links").fetchone()[0]
+            stats.unique_domains = conn.execute("SELECT COUNT(*) FROM domains").fetchone()[0]
+        stats.finish()
+        return stats
+
     def _import_file(self, conn, path: Path, stats: ImportStats) -> None:
         size = path.stat().st_size
         digest = file_sha256(path)
