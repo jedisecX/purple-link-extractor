@@ -75,6 +75,33 @@ CREATE INDEX IF NOT EXISTS idx_links_scheme ON links(scheme);
 CREATE INDEX IF NOT EXISTS idx_domains_registered ON domains(registered_domain);
 CREATE INDEX IF NOT EXISTS idx_sources_hash ON sources(file_hash);
 CREATE INDEX IF NOT EXISTS idx_link_sources_source ON link_sources(source_id);
+
+CREATE TABLE IF NOT EXISTS harvest_queue (
+    id INTEGER PRIMARY KEY,
+    link_id INTEGER NOT NULL UNIQUE,
+    status TEXT NOT NULL DEFAULT 'QUEUED',
+    priority TEXT NOT NULL DEFAULT 'NORMAL',
+    added_at TEXT NOT NULL,
+    FOREIGN KEY(link_id) REFERENCES links(id)
+);
+
+CREATE TABLE IF NOT EXISTS activity (
+    id INTEGER PRIMARY KEY,
+    event TEXT NOT NULL,
+    detail TEXT,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS saved_searches (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    query TEXT,
+    filters TEXT,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_queue_status ON harvest_queue(status);
+CREATE INDEX IF NOT EXISTS idx_activity_created ON activity(created_at);
 """
 
 
@@ -90,8 +117,17 @@ def connect(db_path: str | Path) -> sqlite3.Connection:
     return conn
 
 
+def _column_names(conn: sqlite3.Connection, table: str) -> set[str]:
+    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    return {r["name"] for r in rows}
+
+
 def initialize(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA)
+    cols = _column_names(conn, "links")
+    if cols and "status" not in cols:
+        conn.execute("ALTER TABLE links ADD COLUMN status TEXT NOT NULL DEFAULT 'DISCOVERED'")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_links_status ON links(status)")
     conn.commit()
 
 
