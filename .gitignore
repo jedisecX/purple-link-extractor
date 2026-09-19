@@ -10,5 +10,6 @@ build/
 bench_urls.txt
 bench.db
 output/
+inbox/
 .venv/
 venv/

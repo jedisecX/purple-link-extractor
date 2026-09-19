@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PURPLE LINK EXTRACTOR — CONTROL CENTER</title>
+  <link rel="stylesheet" href="/static/styles/purple.css" />
+</head>
+<body>
+  <div class="app">
+    <aside class="rail" id="rail">
+      <div class="mark">
+        <div class="glyph">P</div>
+        <div>
+          <div class="brand">PURPLE</div>
+          <div class="sub">LINK EXTRACTOR</div>
+        </div>
+      </div>
+      <nav>
+        <button data-view="dashboard" class="on">Dashboard</button>
+        <button data-view="import">Import Files</button>
+        <button data-view="search">Search URLs</button>
+        <button data-view="domains">Domains</button>
+        <button data-view="sources">Sources</button>
+        <button data-view="export">Export</button>
+        <button data-view="queue">Harvest Queue</button>
+        <button data-view="settings">Settings</button>
+      </nav>
+      <div class="pulse"><span class="dot"></span> LIBRARY LIVE</div>
+    </aside>
+
+    <main>
+      <header class="top">
+        <div>
+          <h1 id="view-title">DASHBOARD</h1>
+          <p class="tag">DISCOVER • ORGANIZE • SEARCH • CONTROL</p>
+        </div>
+        <button class="burger" id="burger">☰</button>
+      </header>
+      <section id="stage" class="stage"></section>
+      <footer>
+        <span>JEDISEC</span>
+        <em>“THE INTERNET REMEMBERS. NOW YOU CAN TOO.”</em>
+      </footer>
+    </main>
+  </div>
+  <div id="drawer" class="drawer hidden"></div>
+  <script type="module" src="/static/js/app.js"></script>
+</body>
+</html>
