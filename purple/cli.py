@@ -135,5 +135,20 @@ def export_domain_cmd(ctx, hostname, fmt, out):
     print(dest)
 
 
+@main.command("serve")
+@click.option("--host", default="127.0.0.1")
+@click.option("--port", default=8747, type=int)
+@click.pass_context
+def serve_cmd(ctx, host, port):
+    """Launch the Purple Control Center."""
+    import uvicorn
+    from purple.api.app import create_app
+
+    cfg = ctx.obj["cfg"]
+    app = create_app(cfg.database)
+    click.echo(f"Purple Control Center  http://{host}:{port}")
+    uvicorn.run(app, host=host, port=port)
+
+
 if __name__ == "__main__":
     main()
