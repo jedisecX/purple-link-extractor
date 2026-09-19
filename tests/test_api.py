@@ -45,6 +45,16 @@ def test_keyset_pagination(tmp_path):
     assert page2["items"][0]["id"] < page1["items"][-1]["id"]
 
 
+def test_harvest_presets_and_validation(tmp_path):
+    db = _seed(tmp_path)
+    client = TestClient(create_app(db))
+    presets = client.get("/api/harvest/presets").json()
+    assert presets["items"]
+    assert any("filetype:pdf" in p["dork"] for p in presets["items"])
+    bad = client.post("/api/harvest", json={"dork": "  "})
+    assert bad.status_code == 400
+
+
 def test_queue(tmp_path):
     db = _seed(tmp_path)
     client = TestClient(create_app(db))

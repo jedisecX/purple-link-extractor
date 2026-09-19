@@ -135,6 +135,34 @@ def export_domain_cmd(ctx, hostname, fmt, out):
     print(dest)
 
 
+@main.command("harvest")
+@click.argument("dork")
+@click.option("--engine", "engines", multiple=True, type=click.Choice(["yahoo", "bing"]), default=("yahoo", "bing"))
+@click.option("--pages", default=5, type=int, help="Result pages per engine (max 20)")
+@click.option("--delay", default=2.0, type=float, help="Seconds between search pages")
+@click.pass_context
+def harvest_cmd(ctx, dork, engines, pages, delay):
+    """Dork Yahoo/Bing, unwrap result links, index into the existing DB.
+
+    Does not download documents. Does not write csv/txt — use `purple export`.
+    """
+    from purple.database import get_db
+    from purple.harvester import SearchHarvester
+    from purple.services import library as lib
+
+    cfg = ctx.obj["cfg"]
+    harvester = SearchHarvester(delay=delay)
+    found = harvester.harvest(dork, engines=list(engines) or ["yahoo", "bing"], pages=pages)
+    click.echo(f"Discovered {found.discovered} URLs across {found.pages_fetched} pages")
+    importer = Importer(cfg.database, accepted_schemes=cfg.import_cfg.accepted_schemes)
+    label = f"harvest:{'+'.join(found.engines)}:{dork}"
+    stats = importer.ingest_urls(found.urls, source_name=label[:240], label="harvest")
+    with get_db(cfg.database) as conn:
+        lib.log_activity(conn, "HARVEST INDEXED", f"{dork} +{stats.unique_urls}")
+        conn.commit()
+    print_import_stats(stats, Path(cfg.database))
+
+
 @main.command("serve")
 @click.option("--host", default="127.0.0.1")
 @click.option("--port", default=8747, type=int)

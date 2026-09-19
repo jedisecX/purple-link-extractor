@@ -6,7 +6,7 @@ Extracts HTTP/HTTPS URLs from `.txt` and `.csv` files, normalizes and deduplicat
 
 Pipeline: **DISCOVER → EXTRACT → NORMALIZE → CLASSIFY → STORE**
 
-Not a crawler. It does not fetch URLs.
+Not a document crawler. File import never fetches URLs. Optional dork harvest queries Yahoo/Bing for result links only.
 
 ## Features
 
@@ -22,6 +22,8 @@ Not a crawler. It does not fetch URLs.
 - Keyset pagination on `/api/urls` (`after` cursor + `has_more` / `next`)
 - Virtualized search/domain tables for million-row corpora
 - Harvest queue as a handoff list only — no auto-download
+- Dork harvest (Yahoo + Bing) with rotating headers and Yahoo `/RU=` unwrap
+- Harvest writes into the same SQLite; csv/txt only on export
 - YAML config; CLI flags override
 - Parameterized SQL only. Input treated as untrusted.
 
@@ -80,6 +82,15 @@ The UI is a management layer over the existing SQLite librarian. It does not cra
 
 Search pages with `GET /api/urls?after=<id>&limit=80`. The virtual table requests `after=next` until `has_more` is false.
 
+### Dork harvest
+
+Queries Yahoo and Bing. Unwraps Yahoo `/RU=.../RK=` and Bing `/ck/a?u=a1...` wrappers. Rotates User-Agent / Accept-Language. Indexes hits into the existing `links` table (normalized_url unique — no second database, no duplicate rows). Does not download the documents. Files are written only by `purple export`.
+
+```bash
+purple harvest "site:cisa.gov filetype:pdf" --engine yahoo --engine bing --pages 8
+purple export csv
+```
+
 ## Config (`purple.yaml`)
 
 ```yaml
@@ -129,7 +140,8 @@ purple/
   extractor.py        TXT/CSV URL harvest
   normalizer.py       scheme/host/port/IDN
   domains.py          public-suffix split
-  importer.py         streaming pipeline
+  importer.py         streaming pipeline + harvest ingest
+  harvester.py        Yahoo/Bing dork discovery
   exporter.py         csv/json/domain dirs
   statistics.py       reports
   api/app.py          FastAPI Control Center
